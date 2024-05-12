@@ -1,10 +1,10 @@
 {
   "name": "sose24-api-exercise",
   "version": "1.0.0",
-  "type" : "module",
+  "type": "module",
   "scripts": {
     "test": "jest",
-    "start": "node src/main.js"
+    "start": "node src/main.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.24.4",
