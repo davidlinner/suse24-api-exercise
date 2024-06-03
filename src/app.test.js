@@ -1,46 +1,111 @@
-const request = require('supertest');
-const app = require('./app.cjs');
-const path = require('path');
+import request from 'supertest';
+import app from './app.js';
+import { read, write } from './tools/json-files.js';
 
-const absolutePath = path.resolve(__dirname, '../data/questions.json');
-console.log(absolutePath);
+jest.mock('./tools/json-files.js');
 
-describe('GET /questions', () => {
-    it('responds with JSON containing questions data', async () => {
-        const response = await request(app).get('/questions');
-        expect(response.status).toBe(200);
-        expect(response.body).toHaveProperty('questions');
-    });
+const mockUsers = [
+    { username: 'testuser', password: 'testpassword' }
+];
 
-    it('responds with 500 if unable to read questions data', async () => {
-        // Mock the file read operation to simulate an error
-        jest.spyOn(require('fs'), 'readFileSync').mockImplementation(() => {
-            throw new Error('Unable to read file');
+const mockQuestions = [
+    { id: '1', question: 'What is 2 + 2?', options: ['3', '4', '5'] }
+];
+
+describe('API Endpoints', () => {
+    beforeAll(() => {
+        read.mockImplementation(async (filePath) => {
+            if (filePath === 'data/users.json') {
+                return mockUsers;
+            }
+            if (filePath === 'data/questions.json') {
+                return mockQuestions;
+            }
+            return [];
         });
 
-        const response = await request(app).get('/questions');
-        expect(response.status).toBe(500);
-        expect(response.body).toHaveProperty('message', 'Internal server error.');
-    });
-});
-
-describe('POST /game-runs', () => {
-    it('creates a new game run and responds with ID', async () => {
-        const userData = { username: 'Max', password: '$2b$10$Gh9PsyavKZ3zEI8Fi5uFeuf/VP/RdeAdqD0Mg3tvl2.X6YfM/nGuO' };  // 示例用户数据
-        const response = await request(app).post('/game-runs').send(userData);
-        expect(response.status).toBe(200);
-        expect(response.body).toHaveProperty('id');
+        write.mockImplementation(async (filePath, data) => {
+            if (filePath === 'data/users.json') {
+                mockUsers.push(data);
+            }
+        });
     });
 
-    it('responds with 500 if unable to create game run', async () => {
-        // Mock the file read operation to simulate an error
-        jest.spyOn(require('fs'), 'readFileSync').mockImplementation(() => {
-            throw new Error('Unable to read file');
+    afterAll(() => {
+        jest.resetAllMocks();
+    });
+
+    it('should authenticate user and return a token', async () => {
+        const res = await request(app)
+            .post('/authenticate')
+            .send({ username: 'testuser', password: 'testpassword' });
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body).toHaveProperty('token');
+    });
+
+    it('should fail to authenticate user with wrong password', async () => {
+        const res = await request(app)
+            .post('/authenticate')
+            .send({ username: 'testuser', password: 'wrongpassword' });
+
+        expect(res.statusCode).toEqual(401);
+        expect(res.body).toHaveProperty('message', 'Invalid username or password');
+    });
+
+    it('should return a list of questions', async () => {
+        const res = await request(app)
+            .get('/questions')
+            .set('Authorization', `Bearer ${jwt.sign({ username: 'testuser' }, '1234', { expiresIn: '1h' })}`);
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body).toEqual(mockQuestions.map(({ id, question, options }) => ({ id, question, options })));
+    });
+
+    it('should return a specific question', async () => {
+        const res = await request(app)
+            .get('/questions/1')
+            .set('Authorization', `Bearer ${jwt.sign({ username: 'testuser' }, '1234', { expiresIn: '1h' })}`);
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body).toEqual(mockQuestions[0]);
+    });
+
+    it('should return 404 for a non-existent question', async () => {
+        const res = await request(app)
+            .get('/questions/999')
+            .set('Authorization', `Bearer ${jwt.sign({ username: 'testuser' }, '1234', { expiresIn: '1h' })}`);
+
+        expect(res.statusCode).toEqual(404);
+        expect(res.body).toHaveProperty('message', 'Question not found');
+    });
+
+    it('should return game run results for authenticated user', async () => {
+        const mockGameRuns = [
+            { id: 'run1', userName: 'testuser', results: 'some results' }
+        ];
+
+        read.mockImplementationOnce(async (filePath) => {
+            if (filePath === 'data/game-runs.json') {
+                return mockGameRuns;
+            }
+            return [];
         });
 
-        const userData = { username: 'Max', password: '$2b$10$Gh9PsyavKZ3zEI8Fi5uFeuf/VP/RdeAdqD0Mg3tvl2.X6YfM/nGuO' };  // Example user data
-        const response = await request(app).post('/game-runs').send(userData);
-        expect(response.status).toBe(500);
-        expect(response.body).toHaveProperty('message', 'Internal server error.');
+        const res = await request(app)
+            .get('/game-runs/run1/results')
+            .set('Authorization', `Bearer ${jwt.sign({ username: 'testuser' }, '1234', { expiresIn: '1h' })}`);
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body).toEqual('some results');
+    });
+
+    it('should return 404 for a non-existent game run', async () => {
+        const res = await request(app)
+            .get('/game-runs/run999/results')
+            .set('Authorization', `Bearer ${jwt.sign({ username: 'testuser' }, '1234', { expiresIn: '1h' })}`);
+
+        expect(res.statusCode).toEqual(404);
+        expect(res.body).toHaveProperty('message', 'Run not found or access denied');
     });
 });

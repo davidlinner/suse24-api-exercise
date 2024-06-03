@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "jest",
-    "start": "node src/main.cjs"
+    "start": "node src/main.js"
   },
   "devDependencies": {
     "@babel/core": "^7.24.4",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.2",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "joi": "^17.12.3",
